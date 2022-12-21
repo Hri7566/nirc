@@ -62,22 +62,100 @@ exports.MessageTypes = Object.seal({
     WATCH: 'WATCH',
     WHO: 'WHO',
     WHOIS: 'WHOIS',
-    WHOWAS: 'WHOWAS'
+    WHOWAS: 'WHOWAS',
+    RPL_WELCOME: '001',
+    RPL_YOURHOST: '002',
+    RPL_CREATED: '003',
+    RPL_MYINFO: '004',
+    RPL_BOUNCE: '005',
+    RPL_ISUPPORT: '005',
+    RPL_MAP: '006',
+    RPL_MAPEND: '007',
+    RPL_SNOMASK: '008',
+    RPL_STATEMEMTOT: '009',
+    RPL_BOUNCE_010: '010',
+    RPL_STATMEM: '010',
+    RPL_YOURCOOKIE: '014',
+    RPL_MAP_015: '015',
+    RPL_MAPMORE: '016',
+    RPL_MAPEND_017: '017',
+    RPL_YOURID: '042',
+    RPL_SAVENICK: '043',
+    RPL_ATTEMPTINGJUNC: '050',
+    RPL_ATTEMPTINGREROUTE: '051',
+    RPL_TRACELINK: '200',
+    RPL_TRACECONNECTING: '201',
+    RPL_TRACEHANDSHAKE: '202',
+    RPL_TRACEUNKNOWN: '203',
+    RPL_TRACEOPERATOR: '204',
+    RPL_TRACEUSER: '205',
+    RPL_TRACESERVER: '206',
+    RPL_TRACESERVICE: '207',
+    RPL_TRACENEWTYPE: '208',
+    RPL_TRACECLASS: '209',
+    RPL_TRACERECONNECT: '210',
+    RPL_STATS: '210',
+    RPL_STATSLINKINFO: '211',
+    RPL_STATSCOMMANDS: '212',
+    RPL_SERVICEINFO: '231',
+    RPL_ENDOFSERVICES: '232',
+    RPL_SERVICE: '233',
+    RPL_STATSPING: '246',
+    RPL_LOCALUSERS: '265',
+    RPL_GLOBALUSERS: '266',
+    RPL_TEXT: '304',
+    RPL_WHOISCHANOP: '316',
+    RPL_LISTSTART: '321',
+    RPL_LIST: '322',
+    RPL_LISTEND: '323',
+    RPL_SUMMONING: '342',
+    RPL_KILLDONE: '361',
+    RPL_CLOSING: '362',
+    RPL_CLOSEEND: '363',
+    RPL_INFOSTART: '373',
+    RPL_MOTDSTART: '375',
+    RPL_ENDOFMOTD: '376',
+    RPL_SPAM: '377',
+    RPL_MOTD: '378',
+    RPL_MYPORTIS: '384',
+    RPL_USERSSTART: '392',
+    RPL_USERS: '393',
+    RPL_ENDOFUSERS: '394',
+    ERR_NOMOTD: '422',
+    ERR_YOUWILLBEBANNED: '466',
+    ERR_NOSERVICEHOST: '492',
+    ERR_VWORLDWARN: '503',
+    ERR_WHOTRUNC: '520',
+    RPL_DUMPING: '640',
+    RPL_DUMPRPL: '641',
+    RPL_EODUMP: '642'
 });
 class Client extends node_events_1.EventEmitter {
     constructor(config) {
         super();
         this.config = config;
         this.socket = new node_net_1.Socket();
+        this.ready = false;
         this.connectionAttempts = 0;
         this.bindEventListeners();
     }
     bindEventListeners() {
         this.on(exports.MessageTypes.PING, args => {
+            if (this.config.disablePingReply)
+                return;
             this.pingReply(...args);
         });
         this.on(exports.MessageTypes.JOIN, args => {
             this.join(args[0]);
+        });
+        this.on(exports.MessageTypes.ERR_NOMOTD, args => {
+            this.becomeReady();
+        });
+        this.on(exports.MessageTypes.RPL_MOTD, args => {
+            this.becomeReady();
+        });
+        this.on(exports.MessageTypes.RPL_ENDOFMOTD, args => {
+            this.becomeReady();
         });
     }
     connect() {
@@ -104,23 +182,24 @@ class Client extends node_events_1.EventEmitter {
             let text = data.toString();
             if (!text)
                 return;
-            let args = text.split(' ');
-            if (args[0].startsWith(':')) {
-                // server command?
-                let [server, cmd, ...cmdArgs] = args;
-                console.log(cmd, ...cmdArgs);
-                this.emit(cmd, cmdArgs, server);
+            for (let line of text.split('\n')) {
+                let args = line.split(' ');
+                if (args[0].startsWith(':')) {
+                    // message from specific place?
+                    let [place, cmd, ...cmdArgs] = args;
+                    console.log(place, cmd, ...cmdArgs);
+                    this.emit(cmd, cmdArgs, place);
+                }
+                else {
+                    // global command?
+                    let [cmd, ...cmdArgs] = args;
+                    this.emit(cmd, ...cmdArgs);
+                }
             }
-            else {
-                // global command?
-                let [cmd, ...cmdArgs] = args;
-                this.emit(cmd, ...cmdArgs);
-            }
-            let msg = {};
         });
     }
-    disconnect() {
-        this.raw(exports.MessageTypes.QUIT);
+    disconnect(msg) {
+        this.raw(exports.MessageTypes.QUIT, msg);
         this.socket.end();
     }
     join(ch) {
@@ -140,6 +219,10 @@ class Client extends node_events_1.EventEmitter {
     }
     pingReply(...data) {
         this.raw(`${exports.MessageTypes.PONG} ${data.join(' ')}`);
+    }
+    becomeReady() {
+        this.ready = true;
+        this.emit('ready', this.ready);
     }
 }
 exports.Client = Client;

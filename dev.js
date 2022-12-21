@@ -9,10 +9,6 @@ const cl = new IRC.Client({
 
 cl.connect();
 
-cl.socket.on('data', data => {
-    // console.log(data.toString());
-});
-
 cl.on(IRC.ClientEvents.Ready, () => {
     console.log('online');
 });

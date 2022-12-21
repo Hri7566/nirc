@@ -7,6 +7,7 @@ export interface IRCConfig {
     password?: string;
     nick: string;
     fullName: string;
+    disablePingReply?: boolean;
 }
 
 export const ClientEvents = Object.seal({
@@ -69,13 +70,102 @@ export const MessageTypes = Object.seal({
     WATCH: 'WATCH',
     WHO: 'WHO',
     WHOIS: 'WHOIS',
-    WHOWAS: 'WHOWAS'
+    WHOWAS: 'WHOWAS',
+
+    RPL_WELCOME: '001',
+    RPL_YOURHOST: '002',
+    RPL_CREATED: '003',
+    RPL_MYINFO: '004',
+    RPL_BOUNCE: '005',
+    RPL_ISUPPORT: '005',
+    RPL_MAP: '006',
+    RPL_MAPEND: '007',
+    RPL_SNOMASK: '008',
+    RPL_STATEMEMTOT: '009',
+    RPL_BOUNCE_010: '010',
+    RPL_STATMEM: '010',
+    RPL_YOURCOOKIE: '014',
+    RPL_MAP_015: '015',
+    RPL_MAPMORE: '016',
+    RPL_MAPEND_017: '017',
+    RPL_YOURID: '042',
+    RPL_SAVENICK: '043',
+    RPL_ATTEMPTINGJUNC: '050',
+    RPL_ATTEMPTINGREROUTE: '051',
+    RPL_TRACELINK: '200',
+    RPL_TRACECONNECTING: '201',
+    RPL_TRACEHANDSHAKE: '202',
+    RPL_TRACEUNKNOWN: '203',
+    RPL_TRACEOPERATOR: '204',
+    RPL_TRACEUSER: '205',
+    RPL_TRACESERVER: '206',
+    RPL_TRACESERVICE: '207',
+    RPL_TRACENEWTYPE: '208',
+    RPL_TRACECLASS: '209',
+    RPL_TRACERECONNECT: '210',
+    RPL_STATS: '210',
+    RPL_STATSLINKINFO: '211',
+    RPL_STATSCOMMANDS: '212',
+    
+    RPL_SERVICEINFO: '231',
+    RPL_ENDOFSERVICES: '232',
+
+    RPL_SERVICE: '233',
+
+    RPL_STATSPING: '246',
+
+    RPL_LOCALUSERS: '265',
+    RPL_GLOBALUSERS: '266',
+
+    RPL_TEXT: '304',
+
+    RPL_WHOISCHANOP: '316',
+
+    RPL_LISTSTART: '321',
+    RPL_LIST: '322',
+    RPL_LISTEND: '323',
+
+    RPL_SUMMONING: '342',
+
+    RPL_KILLDONE: '361',
+    RPL_CLOSING: '362',
+    RPL_CLOSEEND: '363',
+
+    RPL_INFOSTART: '373',
+
+    RPL_MOTDSTART: '375',
+    RPL_ENDOFMOTD: '376',
+
+    RPL_SPAM: '377',
+
+    RPL_MOTD: '378',
+
+    RPL_MYPORTIS: '384',
+
+    RPL_USERSSTART: '392',
+    RPL_USERS: '393',
+    RPL_ENDOFUSERS: '394',
+
+    ERR_NOMOTD: '422',
+
+    ERR_YOUWILLBEBANNED: '466',
+
+    ERR_NOSERVICEHOST: '492',
+
+    ERR_VWORLDWARN: '503',
+
+    ERR_WHOTRUNC: '520',
+
+    RPL_DUMPING: '640',
+    RPL_DUMPRPL: '641',
+    RPL_EODUMP: '642'
 });
 
 export type ChannelName = `#${string}`;
 
 export class Client extends EventEmitter {
     public socket: Socket = new Socket();
+    public ready: boolean = false;
 
     constructor(public config: IRCConfig) {
         super();
@@ -84,11 +174,24 @@ export class Client extends EventEmitter {
 
     private bindEventListeners() {
         this.on(MessageTypes.PING, args => {
+            if (this.config.disablePingReply) return;
             this.pingReply(...args);
         });
 
         this.on(MessageTypes.JOIN, args => {
             this.join(args[0]);
+        });
+
+        this.on(MessageTypes.ERR_NOMOTD, args => {
+            this.becomeReady();
+        });
+
+        this.on(MessageTypes.RPL_MOTD, args => {
+            this.becomeReady();
+        });
+
+        this.on(MessageTypes.RPL_ENDOFMOTD, args => {
+            this.becomeReady();
         });
     }
 
@@ -125,28 +228,26 @@ export class Client extends EventEmitter {
             let text: string = data.toString();
             if (!text) return;
 
-            let args = text.split(' ');
+            for (let line of text.split('\n')) {
+                let args = line.split(' ');
             
-            if (args[0].startsWith(':')) {
-                // message from specific place?
-                let [place, cmd, ...cmdArgs] = args;
-                console.log(cmd, ...cmdArgs);
+                if (args[0].startsWith(':')) {
+                    // message from specific place?
+                    let [place, cmd, ...cmdArgs] = args;
 
-                this.emit(cmd, cmdArgs, place);
-            } else {
-                // global command?
-                let [cmd, ...cmdArgs] = args;
-                this.emit(cmd, ...cmdArgs);
-            }
-
-            let msg = {
-                
+                    console.log(place, cmd, ...cmdArgs);
+                    this.emit(cmd, cmdArgs, place);
+                } else {
+                    // global command?
+                    let [cmd, ...cmdArgs] = args;
+                    this.emit(cmd, ...cmdArgs);
+                }
             }
         });
     }
 
-    public disconnect(): void {
-        this.raw(MessageTypes.QUIT);
+    public disconnect(msg: string): void {
+        this.raw(MessageTypes.QUIT, msg);
         this.socket.end();
     }
 
@@ -169,5 +270,10 @@ export class Client extends EventEmitter {
 
     public pingReply(...data: string[]) {
         this.raw(`${MessageTypes.PONG} ${data.join(' ')}`);
+    }
+
+    private becomeReady() {
+        this.ready = true;
+        this.emit('ready', this.ready);
     }
 }
