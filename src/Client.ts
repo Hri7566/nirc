@@ -127,6 +127,8 @@ export const MessageTypes = Object.seal({
 
     RPL_SUMMONING: '342',
 
+    RPL_NAMREPLY: '353',
+
     RPL_KILLDONE: '361',
     RPL_CLOSING: '362',
     RPL_CLOSEEND: '363',
@@ -203,12 +205,12 @@ export class Client extends EventEmitter {
         this.socket.on('connect', () => {
             // write password
             if (this.config.password) {
-                this.raw(`PASS ${this.config.password}\r\n`);
+                this.raw(`PASS ${this.config.password}`);
             }
 
             // set user info
-            this.raw(`${MessageTypes.NICK} ${this.config.nick}\r\n`);
-            this.raw(`${MessageTypes.USER} ${this.config.nick} 0 * : ${this.config.fullName}\r\n`);
+            this.raw(`${MessageTypes.NICK} ${this.config.nick}`);
+            this.raw(`${MessageTypes.USER} ${this.config.nick} 0 * : ${this.config.fullName}`);
         });
 
         this.socket.on('error', (...args) => {
@@ -229,13 +231,26 @@ export class Client extends EventEmitter {
             if (!text) return;
 
             for (let line of text.split('\n')) {
-                let args = line.split(' ');
+                //? maybe some people need carriage returns, but i'm getting rid of them
+                let args = line.split('\r').join('').split(' ');
             
                 if (args[0].startsWith(':')) {
                     // message from specific place?
                     let [place, cmd, ...cmdArgs] = args;
 
-                    console.log(place, cmd, ...cmdArgs);
+                    argLoop:
+                    for (let i = 0; i < cmdArgs.length; i++) {
+                        let arg = cmdArgs[i];
+                        if (!arg.startsWith(':')) continue;
+                        
+                        for (let j = i; j < cmdArgs.length; j++) {
+                            cmdArgs = [...cmdArgs.slice(0, i), cmdArgs.slice(i, cmdArgs.length).join(' ')];
+                        }
+
+                        break argLoop;
+                    }
+
+                    // console.log(place, cmd, ...cmdArgs);
                     this.emit(cmd, cmdArgs, place);
                 } else {
                     // global command?
@@ -265,7 +280,7 @@ export class Client extends EventEmitter {
     }
 
     public raw(...data: string[]) {
-        this.socket.write(data.join(' '));
+        this.socket.write(data.join(' ') + '\r\n');
     }
 
     public pingReply(...data: string[]) {
@@ -275,5 +290,9 @@ export class Client extends EventEmitter {
     private becomeReady() {
         this.ready = true;
         this.emit('ready', this.ready);
+    }
+
+    public sendChat(dest: string, msg: string) {
+        this.raw(`${MessageTypes.PRIVMSG} ${dest} :${msg}`);
     }
 }
