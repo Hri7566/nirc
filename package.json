@@ -1,0 +1,16 @@
+{
+  "name": "nirc",
+  "version": "1.0.0",
+  "main": "src/index.js",
+  "repository": "git@github.com:Hri7566/nirc.git",
+  "author": "Hri7566 <hri7566@gmail.com>",
+  "license": "MIT",
+  "scripts": {
+    "build": "npx tsc",
+    "dev": "yarn tsc && node dev"
+  },
+  "devDependencies": {
+    "@types/node": "^18.11.17",
+    "typescript": "^4.9.4"
+  }
+}
