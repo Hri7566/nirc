@@ -168,6 +168,7 @@ export type ChannelName = `#${string}`;
 export class Client extends EventEmitter {
     public socket: Socket = new Socket();
     public ready: boolean = false;
+    public pingInterval?: NodeJS.Timer;
 
     constructor(public config: IRCConfig) {
         super();
@@ -194,6 +195,10 @@ export class Client extends EventEmitter {
 
         this.on(MessageTypes.RPL_ENDOFMOTD, args => {
             this.becomeReady();
+        });
+        
+        this.on(MessageTypes.PING, args => {
+            this.raw(`${MessageTypes.PONG} ${args}`);
         });
     }
 

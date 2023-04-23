@@ -158,6 +158,9 @@ class Client extends node_events_1.EventEmitter {
         this.on(exports.MessageTypes.RPL_ENDOFMOTD, args => {
             this.becomeReady();
         });
+        this.on(exports.MessageTypes.PING, args => {
+            this.raw(`${exports.MessageTypes.PONG} ${args}`);
+        });
     }
     connect() {
         this.socket = (0, node_net_1.createConnection)(this.config.port, this.config.host);
